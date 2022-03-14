@@ -58,6 +58,7 @@ class LinksListCrawler(CrawlerBase):
 
     def start(self):
         self.page_url = get_url(self.get_user_choice())
+        print('Extracting links, Please wait...')
         response = self.get_page_html_doc(self.page_url)
         if response is None:
             print('Please check your internet connection')
@@ -65,14 +66,88 @@ class LinksListCrawler(CrawlerBase):
             soup = BeautifulSoup(response.text, 'html.parser')
             td_tags = soup.find_all('td', attrs={'class': 'titleColumn'})
             self.list_items_link = [get_url(link.findChild('a')['href']) for link in td_tags]
-            # print(f'{self.page_url}\tTotal: {len(self.list_items_link)}')
+            print(f'Total items: {len(self.list_items_link)}')
 
     def print_links(self):
         if self.list_items_link is None:
             print('Links are not crawled yet, First you should call start method')
         else:
             for i, link in enumerate(self.list_items_link):
-                print(str(i).ljust(9, ' '), link)
+                print(str(i + 1).ljust(9, ' '), link)
+
+    def store(self):
+        NotImplemented()
+
+
+class DetailsCrawler(CrawlerBase):
+    def __init__(self, links_list_crawler, threads_count=1):
+        self.links_list_crawler = links_list_crawler
+        self.threads_count = threads_count
+        self.q = queue.Queue()
+        self.list_details = list()
+
+    def start(self):
+        print('Extracting Details, Please wait...')
+        for link in self.links_list_crawler.list_items_link:
+            self.q.put(link)
+
+        threads = list()
+        for i in range(self.threads_count + 1):
+            t = threading.Thread(target=self.worker)
+            t.setDaemon(True)
+            threads.append(t)
+            t.start()
+
+        for tr in threads:
+            tr.join()
+
+        self.q.join()
+
+    def worker(self):
+        while True:
+            url = self.q.get()
+            response = self.get_page_html_doc(url)
+            self.parser(response.text) == 0
+            # print(f'{url} \t qsize: {self.q.qsize()}')
+            self.q.task_done()
+
+            if self.q.empty():
+                break
+
+    def parser(self, html_doc):
+        soup = BeautifulSoup(html_doc, 'html.parser')
+        name = soup.find(
+            'h1',
+            attrs={'class': 'TitleHeader__TitleText-sc-1wu6n3d-0'},
+        )
+
+        year = soup.find(
+            'a',
+            attrs={'class': 'ipc-link ipc-link--baseAlt ipc-link--inherit-color TitleBlockMetaData__StyledTextLink-sc-12ein40-1 rgaOW'},
+        )
+
+        description = soup.find(
+            'span',
+            attrs={'class': 'GenresAndPlot__TextContainerBreakpointXL-sc-cum89p-2 eqbKRZ'},
+        )
+
+        details = {
+            'name': name.text,
+            'year': year.text,
+            'description': description.text,
+        }
+
+        self.list_details.append(details)
+
+    def print_links(self):
+        self.links_list_crawler.print_links()
+
+    def print_details(self):
+        if self.list_details is None:
+            print('Items are not crawled yet, First you should call start method')
+        else:
+            for i, detail in enumerate(self.list_details):
+                print(str(i + 1).ljust(9, ' '), f"{detail['name'].ljust(60, ' ')} \t {detail['year']} \t {detail['description'][:40]}")
 
     def store(self):
         NotImplemented()
