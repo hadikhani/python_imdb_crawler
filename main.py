@@ -1,7 +1,3 @@
-import threading, queue
-import requests
-from bs4 import BeautifulSoup
-from config import URLS, get_url
 from crawler import LinksListCrawler, DetailsCrawler
 
 

@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
-import threading, queue
+import queue
+import threading
+
 import requests
 from bs4 import BeautifulSoup
+
 from config import URLS, get_url
 
 
@@ -28,12 +31,13 @@ class CrawlerBase(ABC):
                 print('\n* Invalid input, Please try again')
                 return self.get_user_choice()
 
-        except Exception as ex:
+        except:
             # print(ex)
             print('\n* Invalid input, Please try again')
             return self.get_user_choice()
 
-    def get_page_html_doc(self, url):
+    @staticmethod
+    def get_page_html_doc(url):
         try:
             response = requests.get(url)
         except Exception as ex:
@@ -57,6 +61,7 @@ class LinksListCrawler(CrawlerBase):
         self.list_items_link = None
 
     def start(self):
+        print('*' * 40, 'IMDB Crawler', '*' * 40)
         self.page_url = get_url(self.get_user_choice())
         print('Extracting links, Please wait...')
         response = self.get_page_html_doc(self.page_url)
@@ -87,7 +92,7 @@ class DetailsCrawler(CrawlerBase):
         self.list_details = list()
 
     def start(self):
-        print('Extracting Details, Please wait...')
+        print(f'Extracting Details started with {self.threads_count} threads, Please wait...')
         for link in self.links_list_crawler.list_items_link:
             self.q.put(link)
 
@@ -107,7 +112,7 @@ class DetailsCrawler(CrawlerBase):
         while True:
             url = self.q.get()
             response = self.get_page_html_doc(url)
-            self.parser(response.text) == 0
+            self.parser(response.text)
             # print(f'{url} \t qsize: {self.q.qsize()}')
             self.q.task_done()
 
@@ -123,7 +128,7 @@ class DetailsCrawler(CrawlerBase):
 
         year = soup.find(
             'a',
-            attrs={'class': 'ipc-link ipc-link--baseAlt ipc-link--inherit-color TitleBlockMetaData__StyledTextLink-sc-12ein40-1 rgaOW'},
+            attrs={'class': 'ipc-link ipc-link--baseAlt ipc-link--inherit-color TitleBlockMetaData__StyledTextLink-sc-12ein40-1 rgaOW',},
         )
 
         description = soup.find(
@@ -147,7 +152,10 @@ class DetailsCrawler(CrawlerBase):
             print('Items are not crawled yet, First you should call start method')
         else:
             for i, detail in enumerate(self.list_details):
-                print(str(i + 1).ljust(9, ' '), f"{detail['name'].ljust(60, ' ')} \t {detail['year']} \t {detail['description'][:40]}")
+                print(
+                    str(i + 1).ljust(9, ' '),
+                    f"{detail['name'].ljust(60, ' ')} \t {detail['year']} \t {detail['description'][:40]}"
+                )
 
     def store(self):
         NotImplemented()
