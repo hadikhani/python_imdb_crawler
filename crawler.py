@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 import queue
 import threading
+from copy import deepcopy
+import json
 
 import requests
 from bs4 import BeautifulSoup
@@ -58,7 +60,7 @@ class CrawlerBase(ABC):
 class LinksListCrawler(CrawlerBase):
     def __init__(self):
         self.page_url = None
-        self.list_items_link = None
+        self.items_link = dict()
 
     def start(self):
         print('*' * 40, 'IMDB Crawler', '*' * 40)
@@ -70,18 +72,28 @@ class LinksListCrawler(CrawlerBase):
         else:
             soup = BeautifulSoup(response.text, 'html.parser')
             td_tags = soup.find_all('td', attrs={'class': 'titleColumn'})
-            self.list_items_link = [get_url(link.findChild('a')['href']) for link in td_tags]
-            print(f'Total items: {len(self.list_items_link)}')
+            # self.items_link =
+            for i, link in enumerate(td_tags):
+                self.items_link[str(i + 1)] = {
+                    'id': str(i + 1),
+                    'url': get_url(link.findChild('a')['href'])
+                }
+            print(f'Total items: {len(self.items_link)}')
 
     def print_links(self):
-        if self.list_items_link is None:
+        if self.items_link is None:
             print('Links are not crawled yet, First you should call start method')
         else:
-            for i, link in enumerate(self.list_items_link):
-                print(str(i + 1).ljust(9, ' '), link)
+            print('ID'.ljust(9, ' '), '|\t', 'URL')
+            print('-' * 60)
+            for i, link in enumerate(self.items_link.keys()):
+                print(link.ljust(9, ' '), '|\t', self.items_link[link]['url'])
+                print('-' * 60)
 
     def store(self):
-        NotImplemented()
+        with open('archives/links.json', 'w') as f:
+            f.write(json.dumps(self.items_link))
+        print('Links saved')
 
 
 class DetailsCrawler(CrawlerBase):
@@ -89,12 +101,12 @@ class DetailsCrawler(CrawlerBase):
         self.links_list_crawler = links_list_crawler
         self.threads_count = threads_count
         self.q = queue.Queue()
-        self.list_details = list()
+        self.details = deepcopy(links_list_crawler.items_link)
 
     def start(self):
         print(f'Extracting Details started with {self.threads_count} threads, Please wait...')
-        for link in self.links_list_crawler.list_items_link:
-            self.q.put(link)
+        for item in self.details.keys():
+            self.q.put(self.details[item])
 
         threads = list()
         for i in range(self.threads_count + 1):
@@ -110,52 +122,60 @@ class DetailsCrawler(CrawlerBase):
 
     def worker(self):
         while True:
-            url = self.q.get()
-            response = self.get_page_html_doc(url)
-            self.parser(response.text)
+            item = self.q.get()
+            response = self.get_page_html_doc(item['url'])
+            self.parser(response.text, item)
             # print(f'{url} \t qsize: {self.q.qsize()}')
             self.q.task_done()
 
             if self.q.empty():
                 break
 
-    def parser(self, html_doc):
+    def parser(self, html_doc, item):
         soup = BeautifulSoup(html_doc, 'html.parser')
         name = soup.find(
             'h1',
-            attrs={'class': 'TitleHeader__TitleText-sc-1wu6n3d-0'},
+            attrs={'data-testid': 'hero-title-block__title'},
         )
 
         year = soup.find(
-            'a',
-            attrs={'class': 'ipc-link ipc-link--baseAlt ipc-link--inherit-color TitleBlockMetaData__StyledTextLink-sc-12ein40-1 rgaOW',},
+            'span',
+            attrs={
+                'class': 'sc-52284603-2 iTRONr', },
         )
 
         description = soup.find(
             'span',
-            attrs={'class': 'GenresAndPlot__TextContainerBreakpointXL-sc-cum89p-2 eqbKRZ'},
+            attrs={'data-testid': 'plot-xl'},
         )
 
         details = {
+            'id': item['id'],
+            'url': item['url'],
             'name': name.text,
+            # 'name': 'name',
             'year': year.text,
+            # 'year': 'year',
             'description': description.text,
+            # 'description': 'description',
         }
 
-        self.list_details.append(details)
+        self.details[item['id']] = details
 
     def print_links(self):
         self.links_list_crawler.print_links()
 
     def print_details(self):
-        if self.list_details is None:
+        if self.details is None:
             print('Items are not crawled yet, First you should call start method')
         else:
-            for i, detail in enumerate(self.list_details):
+            for detail in self.details:
                 print(
-                    str(i + 1).ljust(9, ' '),
-                    f"{detail['name'].ljust(60, ' ')} \t {detail['year']} \t {detail['description'][:40]}"
+                    self.details[detail]['id'].ljust(9, ' '),
+                    f"{self.details[detail]['name'].ljust(60, ' ')} \t {self.details[detail]['year']} \t {self.details[detail]['description'][:40]}"
                 )
 
     def store(self):
-        NotImplemented()
+        with open('archives/details.json', 'w') as f:
+            f.write(json.dumps(self.details))
+        print('Details saved')
