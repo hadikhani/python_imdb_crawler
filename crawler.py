@@ -1,8 +1,10 @@
+import os
 from abc import ABC, abstractmethod
 import queue
 import threading
 from copy import deepcopy
 import json
+from os import path
 
 import requests
 from bs4 import BeautifulSoup
@@ -48,6 +50,15 @@ class CrawlerBase(ABC):
 
         return response
 
+    @staticmethod
+    def check_archive_path_exist():
+        if path.exists('archives'):
+            if path.isfile('archives'):
+                os.remove('archives')
+                os.mkdir('archives')
+        else:
+            os.mkdir('archives')
+
     @abstractmethod
     def start(self):
         pass
@@ -91,6 +102,7 @@ class LinksListCrawler(CrawlerBase):
                 print('-' * 60)
 
     def store(self):
+        self.check_archive_path_exist()
         with open('archives/links.json', 'w') as f:
             f.write(json.dumps(self.items_link))
         print('Links saved')
@@ -176,6 +188,7 @@ class DetailsCrawler(CrawlerBase):
                 )
 
     def store(self):
+        self.check_archive_path_exist()
         with open('archives/details.json', 'w') as f:
             f.write(json.dumps(self.details))
         print('Details saved')
